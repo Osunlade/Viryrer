@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Prochains RER D – Viry-Châtillon → Paris</title>
+<style>
+    body { font-family: Arial; background: #f5f5f5; padding: 20px; }
+    h1 { text-align: center; }
+    #results { 
+        background: white; 
+        padding: 20px; 
+        border-radius: 10px; 
+        max-width: 600px; 
+        margin: auto; 
+        box-shadow: 0 0 10px #ccc; 
+    }
+    .train {
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+    }
+</style>
+</head>
+<body>
+
+<h1>Prochains RER D – Viry-Châtillon → Paris</h1>
+<div id="results">Chargement...</div>
+
+<script>
+// --------------------
+// Configuration
+// --------------------
+const API_KEY = ; // <<< METTRE ICI TA CLÉ
+const STOP_POINT = "stop_point:IDFM:59569"; // Viry-Châtillon (RER D)
+const DIRECTION = "forward"; // vers Paris
+const API_URL = `https://api.iledefrance-mobilites.fr/v2/stop-monitoring?MonitoringRef=${STOP_POINT}`;
+
+// --------------------
+// Récupération en temps réel
+// --------------------
+async function loadTrains() {
+    try {
+        const resp = await fetch(API_URL, {
+            headers: { "apikey": API_KEY }
+        });
+
+        if (!resp.ok) throw new Error("Erreur API " + resp.status);
+
+        const data = await resp.json();
+        const items = data.Siri.ServiceDelivery.StopMonitoringDelivery[0].MonitoredStopVisit;
+
+        let html = "";
+
+        items.forEach(v => {
+            const veh = v.MonitoredVehicleJourney;
+            const dir = veh.DirectionName ? veh.DirectionName[0].value : "";
+            const line = veh.LineRef.value;
+            const dest = veh.DestinationName[0].value;
+            const aimed = veh.MonitoredCall.AimedArrivalTime;
+            const expected = veh.MonitoredCall.ExpectedArrivalTime;
+
+            // Filtrer direction Paris
+            if (!dest.toLowerCase().includes("paris")) return;
+
+            const time = new Date(expected || aimed);
+            const hh = time.getHours().toString().padStart(2, "0");
+            const mm = time.getMinutes().toString().padStart(2, "0");
+
+            html += `
+                <div class="train">
+                    <strong>${hh}:${mm}</strong> – Ligne ${line} → ${dest}
+                </div>
+            `;
+        });
+
+        document.getElementById("results").innerHTML =
+            html || "Aucun train trouvé pour le moment.";
+        
+    } catch (err) {
+        document.getElementById("results").innerText = 
+            "Erreur : " + err.message;
+    }
+}
+
+// Refresh toutes les 20 secondes
+loadTrains();
+setInterval(loadTrains, 20000);
+
+</script>
+
+</body>
+</html>
