@@ -1,91 +1,75 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Prochains RER D – Viry-Châtillon → Paris</title>
-<style>
-    body { font-family: Arial; background: #f5f5f5; padding: 20px; }
-    h1 { text-align: center; }
-    #results { 
-        background: white; 
-        padding: 20px; 
-        border-radius: 10px; 
-        max-width: 600px; 
-        margin: auto; 
-        box-shadow: 0 0 10px #ccc; 
-    }
-    .train {
-        padding: 10px;
-        border-bottom: 1px solid #ddd;
-    }
-</style>
+  <meta charset="UTF-8">
+  <title>Prochains RER – Viry-Châtillon</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    #result { margin-top: 20px; }
+  </style>
 </head>
 <body>
 
-<h1>Prochains RER D – Viry-Châtillon → Paris</h1>
-<div id="results">Chargement...</div>
+<h2>Prochains RER C – Gare de Viry-Châtillon</h2>
+<div id="result">Chargement…</div>
 
 <script>
-// --------------------
-// Configuration
-// --------------------
-const API_KEY = 7y6UbPM2nv9RWlmqfQ0waaazmH0ri5Im ; // <<< METTRE ICI TA CLÉ
-const STOP_POINT = "stop_point:IDFM:59569"; // Viry-Châtillon (RER D)
-const DIRECTION = "forward"; // vers Paris
-const API_URL = `https://api.iledefrance-mobilites.fr/v2/stop-monitoring?MonitoringRef=${STOP_POINT}`;
+// === CONFIGURATION ===
+const API_KEY = "7y6UbPM2nv9RWlmqfQ0waaazmH0ri5Im";  // ⚠️ TA NOUVELLE clé regénérée
+const PROXY_URL = "https://prim.iledefrance-mobilites.fr/marketplace/gtfs-rt-trip-updates/v2/gtfs-rt-trip-updates?key=" + API_KEY;
 
-// --------------------
-// Récupération en temps réel
-// --------------------
-async function loadTrains() {
+// IDFM stop_id de la gare de Viry-Châtillon (direction Paris)
+const STOP_ID = "stop_point:OCETrainPSL-8738190"; 
+
+async function loadData() {
     try {
-        const resp = await fetch(API_URL, {
-            headers: { "apikey": API_KEY }
+        const response = await fetch(PROXY_URL);
+        if (!response.ok) throw new Error("Erreur API");
+
+        const arrayBuffer = await response.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+
+        // Décodeur protobuf GTFS-RT en JS via gtfs-realtime-bindings
+        const feed = new window.GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(data);
+
+        let upcoming = [];
+
+        feed.entity.forEach(entity => {
+            if (entity.tripUpdate) {
+                entity.tripUpdate.stopTimeUpdate.forEach(update => {
+                    if (update.stopId === STOP_ID && update.arrival && update.arrival.time) {
+                        upcoming.push(update.arrival.time.low * 1000);
+                    }
+                });
+            }
         });
 
-        if (!resp.ok) throw new Error("Erreur API " + resp.status);
+        upcoming.sort((a, b) => a - b);
 
-        const data = await resp.json();
-        const items = data.Siri.ServiceDelivery.StopMonitoringDelivery[0].MonitoredStopVisit;
+        if (upcoming.length === 0) {
+            document.getElementById("result").innerText = "Aucun train à venir.";
+            return;
+        }
 
-        let html = "";
-
-        items.forEach(v => {
-            const veh = v.MonitoredVehicleJourney;
-            const dir = veh.DirectionName ? veh.DirectionName[0].value : "";
-            const line = veh.LineRef.value;
-            const dest = veh.DestinationName[0].value;
-            const aimed = veh.MonitoredCall.AimedArrivalTime;
-            const expected = veh.MonitoredCall.ExpectedArrivalTime;
-
-            // Filtrer direction Paris
-            if (!dest.toLowerCase().includes("paris")) return;
-
-            const time = new Date(expected || aimed);
-            const hh = time.getHours().toString().padStart(2, "0");
-            const mm = time.getMinutes().toString().padStart(2, "0");
-
-            html += `
-                <div class="train">
-                    <strong>${hh}:${mm}</strong> – Ligne ${line} → ${dest}
-                </div>
-            `;
+        let html = "<ul>";
+        upcoming.slice(0, 5).forEach(t => {
+            html += "<li>" + new Date(t).toLocaleTimeString("fr-FR") + "</li>";
         });
+        html += "</ul>";
 
-        document.getElementById("results").innerHTML =
-            html || "Aucun train trouvé pour le moment.";
-        
-    } catch (err) {
-        document.getElementById("results").innerText = 
-            "Erreur : " + err.message;
+        document.getElementById("result").innerHTML = html;
+
+    } catch (e) {
+        document.getElementById("result").innerText = "Erreur : " + e.message;
     }
 }
 
-// Refresh toutes les 20 secondes
-loadTrains();
-setInterval(loadTrains, 20000);
-
+loadData();
+setInterval(loadData, 30000); // refresh toutes les 30 secondes
 </script>
+
+<!-- Librairie GTFS-RT -->
+<script src="https://cdn.jsdelivr.net/npm/gtfs-realtime-bindings@latest/browser/gtfs-realtime.js"></script>
 
 </body>
 </html>
