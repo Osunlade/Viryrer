@@ -15,60 +15,71 @@
 
 <script>
 // === CONFIGURATION ===
-const API_KEY = "7y6UbPM2nv9RWlmqfQ0waaazmH0ri5Im";  // ⚠️ TA NOUVELLE clé regénérée
-const PROXY_URL = "https://cors-c39h.onrender.com/trip-updates" + API_KEY;
+const API_KEY = "7y6UbPM2nv9RWlmqfQ0waaazmH0ri5Im";
 
-// IDFM stop_id de la gare de Viry-Châtillon (direction Paris)
-const STOP_ID = "stop_point:OCETrainPSL-8738190"; 
+// URL IDFM GTFS-RT trip updates
+const IDFM_URL =
+  "https://prim.iledefrance-mobilites.fr/marketplace/gtfs-rt-trip-updates/v2/gtfs-rt-trip-updates?key=" +
+  API_KEY;
+
+// Ton proxy Render
+const PROXY_URL =
+  "https://cors-c39h.onrender.com/proxy?url=" + encodeURIComponent(IDFM_URL);
+
+// Stop ID de Viry-Châtillon (direction Paris)
+const STOP_ID = "stop_point:OCETrainPSL-8738190";
 
 async function loadData() {
-    try {
-        const response = await fetch(PROXY_URL);
-        if (!response.ok) throw new Error("Erreur API");
+  try {
+    const response = await fetch(PROXY_URL);
+    if (!response.ok) throw new Error("Erreur API");
 
-        const arrayBuffer = await response.arrayBuffer();
-        const data = new Uint8Array(arrayBuffer);
+    const buffer = await response.arrayBuffer();
+    const feed =
+      window.GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(
+        new Uint8Array(buffer)
+      );
 
-        // Décodeur protobuf GTFS-RT en JS via gtfs-realtime-bindings
-        const feed = new window.GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(data);
+    let upcoming = [];
 
-        let upcoming = [];
-
-        feed.entity.forEach(entity => {
-            if (entity.tripUpdate) {
-                entity.tripUpdate.stopTimeUpdate.forEach(update => {
-                    if (update.stopId === STOP_ID && update.arrival && update.arrival.time) {
-                        upcoming.push(update.arrival.time.low * 1000);
-                    }
-                });
-            }
+    feed.entity.forEach((entity) => {
+      if (entity.tripUpdate) {
+        entity.tripUpdate.stopTimeUpdate.forEach((update) => {
+          if (
+            update.stopId === STOP_ID &&
+            update.arrival &&
+            update.arrival.time
+          ) {
+            const ts = Number(update.arrival.time);
+            if (!isNaN(ts)) upcoming.push(ts * 1000);
+          }
         });
+      }
+    });
 
-        upcoming.sort((a, b) => a - b);
+    upcoming.sort((a, b) => a - b);
 
-        if (upcoming.length === 0) {
-            document.getElementById("result").innerText = "Aucun train à venir.";
-            return;
-        }
-
-        let html = "<ul>";
-        upcoming.slice(0, 5).forEach(t => {
-            html += "<li>" + new Date(t).toLocaleTimeString("fr-FR") + "</li>";
-        });
-        html += "</ul>";
-
-        document.getElementById("result").innerHTML = html;
-
-    } catch (e) {
-        document.getElementById("result").innerText = "Erreur : " + e.message;
+    if (upcoming.length === 0) {
+      document.getElementById("result").innerText = "Aucun train à venir.";
+      return;
     }
+
+    let html = "<ul>";
+    upcoming.slice(0, 5).forEach((t) => {
+      html += "<li>" + new Date(t).toLocaleTimeString("fr-FR") + "</li>";
+    });
+    html += "</ul>";
+
+    document.getElementById("result").innerHTML = html;
+  } catch (e) {
+    document.getElementById("result").innerText = "Erreur : " + e.message;
+  }
 }
 
 loadData();
-setInterval(loadData, 30000); // refresh toutes les 30 secondes
+setInterval(loadData, 30000);
 </script>
 
-<!-- Librairie GTFS-RT -->
 <script src="https://cdn.jsdelivr.net/npm/gtfs-realtime-bindings@latest/browser/gtfs-realtime.js"></script>
 
 </body>
